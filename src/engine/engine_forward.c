@@ -297,38 +297,104 @@ void mj_fwdVelocity(const mjModel* m, mjData* d) {
 
   // flexedge velocity: dense or sparse
   if (mj_isSparse(m)) {
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zFlexedgeSparse, "mju_mulMatVecSparse(flexedge)", 1);
+#endif
     mju_mulMatVecSparse(d->flexedge_velocity, d->flexedge_J, d->qvel, m->nflexedge,
                         d->flexedge_J_rownnz, d->flexedge_J_rowadr, d->flexedge_J_colind, NULL);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zFlexedgeSparse);
+#endif
   } else {
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zFlexedgeDense, "mju_mulMatVec(flexedge)", 1);
+#endif
     mju_mulMatVec(d->flexedge_velocity, d->flexedge_J, d->qvel, m->nflexedge, m->nv);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zFlexedgeDense);
+#endif
   }
 
   // tendon velocity: dense or sparse
   if (mj_isSparse(m)) {
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zTendonSparse, "mju_mulMatVecSparse(tendon)", 1);
+#endif
     mju_mulMatVecSparse(d->ten_velocity, d->ten_J, d->qvel, m->ntendon,
                         d->ten_J_rownnz, d->ten_J_rowadr, d->ten_J_colind, NULL);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zTendonSparse);
+#endif
   } else {
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zTendonDense, "mju_mulMatVec(tendon)", 1);
+#endif
     mju_mulMatVec(d->ten_velocity, d->ten_J, d->qvel, m->ntendon, m->nv);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zTendonDense);
+#endif
   }
 
   // actuator velocity: always sparse
   if (!mjDISABLED(mjDSBL_ACTUATION)) {
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zActuatorSparse, "mju_mulMatVecSparse(actuator)", 1);
+#endif
     mju_mulMatVecSparse(d->actuator_velocity, d->actuator_moment, d->qvel, m->nu,
                         d->moment_rownnz, d->moment_rowadr, d->moment_colind, NULL);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zActuatorSparse);
+#endif
   } else {
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zActuatorZero, "mju_zero(actuator_velocity)", 1);
+#endif
     mju_zero(d->actuator_velocity, m->nu);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zActuatorZero);
+#endif
   }
 
   // com-based velocities, passive forces, constraint references
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zComVel, "mj_comVel", 1);
+#endif
   mj_comVel(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zComVel);
+#endif
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zPassive, "mj_passive", 1);
+#endif
   mj_passive(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zPassive);
+#endif
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zRefConstraint, "mj_referenceConstraint", 1);
+#endif
   mj_referenceConstraint(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zRefConstraint);
+#endif
 
   // compute qfrc_bias with abbreviated RNE (without acceleration)
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zRNE, "mj_rne", 1);
+#endif
   mj_rne(m, d, 0, d->qfrc_bias);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zRNE);
+#endif
 
   // add bias force due to tendon armature
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zTendonBias, "mj_tendonBias", 1);
+#endif
   mj_tendonBias(m, d, d->qfrc_bias);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zTendonBias);
+#endif
 
   TM_END(mjTIMER_VELOCITY);
 
