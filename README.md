@@ -18,6 +18,16 @@
 
 > 说明：已在 CMake 接入 Tracy 的头文件与客户端源码；无需额外配置即可编译，并默认按需采集（Viewer 连接时）。
 
+## Tracy 子模块与构建
+- 本仓库包含 Tracy 作为 Git 子模块（`third_party/tracy`）。克隆方式建议：
+  - 直接递归克隆：`git clone --recurse-submodules <repo-url>`
+  - 或在已有克隆中初始化：`git submodule update --init --recursive`
+- 构建 Tracy Viewer（Windows）：
+  - 配置：`cmake -S third_party/tracy/profiler -B third_party/tracy/build/profiler`
+  - 构建：`cmake --build third_party/tracy/build/profiler --config Release -j 8`
+  - 生成路径：`third_party\tracy\build\profiler\Release\tracy-profiler.exe`
+- 注意：`third_party/tracy/build/` 已被 `.gitignore` 排除，不会进入仓库；请在本地按需构建。
+
 ## 运行示例
 - 不启用内部线程池：
   - `build\bin\Release\testspeed.exe model\humanoid\humanoid.xml 500 2 0.01 0.1`
@@ -35,6 +45,14 @@
     - 线程名：`main`、`rollout-<id>`、`worker-<id>`。
     - 帧标记：每步 `mj_step` 的 `FrameMark`。
     - CPU 区段：`mj_fwdPosition`、`mj_fwdVelocity`、`mj_fwdActuation`、`mj_fwdConstraint`、`mj_forwardSkip` 等。
+
+## 版本兼容与锁定
+- 本分支未在代码中指定固定的 Tracy 版本号；Tracy 客户端来自子模块当前提交，并通过 `TracyClient.cpp` 编译嵌入。
+- 协议兼容性要求：Viewer 与客户端必须版本匹配。若出现 “incompatible protocol version”，说明两者不匹配。
+- 推荐做法：
+  - 保持子模块提交固定（仓库已记录子模块的 commit），并从该提交构建 Viewer。
+  - 更新 Tracy 时：先更新子模块到目标提交/标签（例如 `git -C third_party/tracy checkout v0.12.4` 并提交 gitlink），随后重建 Viewer 与本项目。
+  - 若仅更新了 Viewer 或仅更新了子模块客户端，可能产生协议不兼容；务必两者同步。
 
 ## 插桩约定与维护
 - 头文件：在需要的 C 源文件顶部包含 `#include "tracy/TracyC.h"`（受 `TRACY_ENABLE` 控制）。
