@@ -17,6 +17,10 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#ifdef TRACY_ENABLE
+#include "tracy/TracyC.h"
+#endif
+
 #include <mujoco/mjdata.h>
 #include <mujoco/mjmacro.h>
 #include <mujoco/mjmodel.h>
@@ -129,6 +133,10 @@ void* mj_collisionThreaded(void* args) {
 void mj_fwdPosition(const mjModel* m, mjData* d) {
   TM_START1;
 
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zPos, "mj_fwdPosition", 1);
+#endif
+
   TM_START;
   mj_kinematics(m, d);
   mj_comPos(m, d);
@@ -182,12 +190,20 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   TM_END(mjTIMER_POS_PROJECT);
 
   TM_END1(mjTIMER_POSITION);
+
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zPos);
+#endif
 }
 
 
 // velocity-dependent computations
 void mj_fwdVelocity(const mjModel* m, mjData* d) {
   TM_START;
+
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zVel, "mj_fwdVelocity", 1);
+#endif
 
   // flexedge velocity: dense or sparse
   if (mj_isSparse(m)) {
@@ -225,6 +241,10 @@ void mj_fwdVelocity(const mjModel* m, mjData* d) {
   mj_tendonBias(m, d, d->qfrc_bias);
 
   TM_END(mjTIMER_VELOCITY);
+
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zVel);
+#endif
 }
 
 
@@ -270,6 +290,10 @@ static void clampVec(mjtNum* vec, const mjtNum* range, const mjtByte* limited, i
 // (qpos, qvel, ctrl, act) => (qfrc_actuator, actuator_force, act_dot)
 void mj_fwdActuation(const mjModel* m, mjData* d) {
   TM_START;
+
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zAct, "mj_fwdActuation", 1);
+#endif
   int nv = m->nv, nu = m->nu, ntendon = m->ntendon;
   mjtNum gain, bias, tau;
   mjtNum *prm, *force = d->actuator_force;
@@ -280,6 +304,9 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   // disabled or no actuation: return
   if (nu == 0 || mjDISABLED(mjDSBL_ACTUATION)) {
     mju_zero(d->qfrc_actuator, nv);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zAct);
+#endif
     return;
   }
 
@@ -543,11 +570,19 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
   mj_freeStack(d);
   TM_END(mjTIMER_ACTUATION);
+
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zAct);
+#endif
 }
 
 
 // add up all non-constraint forces, compute qacc_smooth
 void mj_fwdAcceleration(const mjModel* m, mjData* d) {
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zAct, "mj_fwdAcceleration", 1);
+#endif
+
   int nv = m->nv;
 
   // qfrc_smooth = sum of all non-constraint forces
@@ -558,6 +593,10 @@ void mj_fwdAcceleration(const mjModel* m, mjData* d) {
 
   // qacc_smooth = M \ qfrc_smooth
   mj_solveM(m, d, d->qacc_smooth, d->qfrc_smooth, 1);
+
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zAct);
+  #endif
 }
 
 
@@ -692,6 +731,10 @@ static void solve_threaded(const mjModel* m, mjData* d, int flg_Newton) {
 // compute efc_b, efc_force, qfrc_constraint; update qacc
 void mj_fwdConstraint(const mjModel* m, mjData* d) {
   TM_START;
+
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zCon, "mj_fwdConstraint", 1);
+#endif
   int nv = m->nv, nefc = d->nefc, nisland = d->nisland;
 
   // always clear qfrc_constraint
@@ -702,6 +745,9 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
     mju_copy(d->qacc, d->qacc_smooth, nv);
     mju_zeroInt(d->solver_niter, mjNISLAND);
     TM_END(mjTIMER_CONSTRAINT);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zCon);
+#endif
     return;
   }
 
@@ -779,6 +825,10 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
   }
 
   TM_END(mjTIMER_CONSTRAINT);
+
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zCon);
+#endif
 }
 
 
@@ -1101,6 +1151,10 @@ static int energyVelSensor(const mjModel* m) {
 void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) {
   TM_START;
 
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zFwd, "mj_forwardSkip", 1);
+#endif
+
   // position-dependent
   if (skipstage < mjSTAGE_POS) {
     mj_fwdPosition(m, d);
@@ -1148,6 +1202,10 @@ void mj_forwardSkip(const mjModel* m, mjData* d, int skipstage, int skipsensor) 
   }
 
   TM_END(mjTIMER_FORWARD);
+
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zFwd);
+#endif
 }
 
 

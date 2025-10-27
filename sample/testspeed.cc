@@ -23,6 +23,10 @@
 
 #include <mujoco/mujoco.h>
 
+#ifdef TRACY_ENABLE
+#include "tracy/TracyC.h"
+#endif
+
 
 // maximum number of threads
 const int maxthread = 512;
@@ -102,6 +106,11 @@ std::vector<mjtNum> CtrlNoise(const mjModel* m, int nsteps, mjtNum ctrl_noise_st
 
 // thread function
 void simulate(int id, int nstep, mjtNum* ctrl) {
+#ifdef TRACY_ENABLE
+  char name[32];
+  std::snprintf(name, sizeof(name), "rollout-%d", id);
+  TracyCSetThreadName(name);
+#endif
   // clear statistics
   contacts[id] = 0;
   constraints[id] = 0;
@@ -115,6 +124,10 @@ void simulate(int id, int nstep, mjtNum* ctrl) {
 
     // advance simulation
     mj_step(m, d[id]);
+
+#ifdef TRACY_ENABLE
+    TracyCFrameMark;
+#endif
 
     // accumulate statistics
     contacts[id] += d[id]->ncon;
@@ -136,9 +149,13 @@ void simulate(int id, int nstep, mjtNum* ctrl) {
 
 // main function
 int main(int argc, char** argv) {
+#ifdef TRACY_ENABLE
+  TracyCSetThreadName("main");
+#endif
 
   // print help if arguments are missing
-  if (argc < 2 || argc > 6) {
+  // allow up to 5 optional arguments after modelfile (argc <= 7)
+  if (argc < 2 || argc > 7) {
     return finish(
       "\n"
       "Usage:  testspeed modelfile [nstep nthread ctrlnoise npoolthread]\n"

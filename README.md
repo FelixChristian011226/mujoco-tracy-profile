@@ -1,200 +1,57 @@
-<h1>
-  <a href="#"><img alt="MuJoCo" src="banner.png" width="100%"/></a>
-</h1>
+# MuJoCo（个人分支）：Tracy 性能分析集成与示例
 
-<p>
-  <a href="https://github.com/google-deepmind/mujoco/actions/workflows/build.yml?query=branch%3Amain" alt="GitHub Actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/google-deepmind/mujoco/build.yml?branch=main">
-  </a>
-  <a href="https://mujoco.readthedocs.io/" alt="Documentation">
-    <img src="https://readthedocs.org/projects/mujoco/badge/?version=latest">
-  </a>
-  <a href="https://github.com/google-deepmind/mujoco/blob/main/LICENSE" alt="License">
-    <img src="https://img.shields.io/github/license/google-deepmind/mujoco">
-  </a>
-</p>
+本分支基于 [google-deepmind/mujoco](https://github.com/google-deepmind/mujoco)，加入了 Tracy 客户端并在关键路径进行了插桩，便于在实际仿真中进行端到端性能分析与定位热点。
 
-**MuJoCo** stands for **Mu**lti-**Jo**int dynamics with **Co**ntact. It is a
-general purpose physics engine that aims to facilitate research and development
-in robotics, biomechanics, graphics and animation, machine learning, and other
-areas which demand fast and accurate simulation of articulated structures
-interacting with their environment.
+## 主要改动
+- 集成 Tracy C 客户端并启用 `TRACY_ENABLE` + `TRACY_ON_DEMAND`（仅在 Viewer 连接时采集）。
+- 在引擎前向流程 `engine_forward.c` 内添加 CPU 区段（函数入口与关键计算片段）。
+- 设置线程名：主线程、rollout 线程、线程池 worker 线程，便于在 Viewer 中区分。
+- 在 `testspeed` 示例中修复参数校验逻辑，允许传入第 6 个参数以启用内部线程池。
+- 在每步 `mj_step` 后添加 `FrameMark`，方便在帧视图中定位与筛选区段。
 
-This repository is maintained by [Google DeepMind](https://www.deepmind.com/).
+## 快速开始（Windows 示例）
+- 构建：
+  - `cmake -S . -B build`
+  - `cmake --build build --config Release -j 8`
+- 单独构建示例：
+  - `cmake --build build --config Release --target testspeed -j 8`
 
-MuJoCo has a C API and is intended for researchers and developers. The runtime
-simulation module is tuned to maximize performance and operates on low-level
-data structures that are preallocated by the built-in XML compiler. The library
-includes interactive visualization with a native GUI, rendered in OpenGL. MuJoCo
-further exposes a large number of utility functions for computing
-physics-related quantities.
+> 说明：已在 CMake 接入 Tracy 的头文件与客户端源码；无需额外配置即可编译，并默认按需采集（Viewer 连接时）。
 
-We also provide [Python bindings] and a plug-in for the [Unity] game engine.
+## 运行示例
+- 不启用内部线程池：
+  - `build\bin\Release\testspeed.exe model\humanoid\humanoid.xml 500 2 0.01 0.1`
+- 启用内部线程池（第 6 个参数为线程池大小）：
+  - `build\bin\Release\testspeed.exe model\humanoid\humanoid.xml 500 2 0.01 0.1 2`
 
-## Documentation
+`testspeed` 会输出每线程统计与内部分析器数据；在 Viewer 连接情况下，也会同步采集并展示区段与线程信息。
 
-MuJoCo's documentation can be found at [mujoco.readthedocs.io]. Upcoming
-features due for the next release can be found in the [changelog] in the
-"latest" branch.
+## Tracy Viewer
+- 使用与客户端版本一致的 Viewer（已从仓库源码构建）：
+  - 路径：`third_party\tracy\build\profiler\Release\tracy-profiler.exe`
+- 推荐流程：
+  - 先启动 Viewer 并点击 “Connect”。
+  - 再运行 `testspeed.exe`，可在 Viewer 中看到：
+    - 线程名：`main`、`rollout-<id>`、`worker-<id>`。
+    - 帧标记：每步 `mj_step` 的 `FrameMark`。
+    - CPU 区段：`mj_fwdPosition`、`mj_fwdVelocity`、`mj_fwdActuation`、`mj_fwdConstraint`、`mj_forwardSkip` 等。
 
-## Getting Started
+## 插桩约定与维护
+- 头文件：在需要的 C 源文件顶部包含 `#include "tracy/TracyC.h"`（受 `TRACY_ENABLE` 控制）。
+- 区段模板：
+  - 进入区段：`TracyCZoneN(zName, "section_name", 1);`
+  - 退出区段：`TracyCZoneEnd(zName);`（注意所有早返回路径都要关闭）
+- 注意避免手动写 `TracyCZoneCtx zName;`（宏内部已声明，重复会导致“重定义”错误）。
+- 无需调用 `___tracy_init_thread()`（C++ 客户端内部符号）；线程命名用 `TracyCSetThreadName` 即可。
 
-There are two easy ways to get started with MuJoCo:
+## 与上游差异（摘要）
+- `src/engine/engine_forward.c`：添加区段宏以定位热点。
+- `src/thread/thread_pool.cc`：为 worker 线程设置 Tracy 线程名。
+- `sample/testspeed.cc`：修复参数检查并添加主线程与 rollout 线程命名、帧标记。
+- CMake：接入 Tracy 头与客户端源码，启用按需采集。
 
-1. **Run `simulate` on your machine.**
-[This video](https://www.youtube.com/watch?v=P83tKA1iz2Y) shows a screen capture
-of `simulate`, MuJoCo's native interactive viewer. Follow the steps described in
-the [Getting Started] section of the documentation to get `simulate` running on
-your machine.
+## License
+- 本仓库为上游 MuJoCo 的衍生分支，保留其原有开源许可证与致谢信息；具体参见 `LICENSE` 与上游文档。
 
-2. **Explore our online IPython notebooks.**
-If you are a Python user, you might want to start with our tutorial notebooks
-running on Google Colab:
-
- - The **introductory** tutorial teaches MuJoCo basics:
-   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/tutorial.ipynb)
- - The **Model Editing** tutorial shows how to create and edit models procedurally:
-   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/mjspec.ipynb)
- - The **rollout** tutorial shows how to use the multithreaded `rollout` module:
-   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/rollout.ipynb)
- - The **LQR** tutorial synthesizes a linear-quadratic controller, balancing a
-   humanoid on one leg:
-   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/LQR.ipynb)
- - The **least-squares** tutorial explains how to use the Python-based nonlinear
-   least-squares solver:
-   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/python/least_squares.ipynb)
- - The **MJX** tutorial provides usage examples of
-   [MuJoCo XLA](https://mujoco.readthedocs.io/en/stable/mjx.html), a branch of MuJoCo written in JAX:
-   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/tutorial.ipynb)
- - The **differentiable physics** tutorial trains locomotion policies with
-   analytical gradients automatically derived from MuJoCo's physics step:
-   [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/google-deepmind/mujoco/blob/main/mjx/training_apg.ipynb)
-
-## Installation
-
-### Prebuilt binaries
-
-Versioned releases are available as precompiled binaries from the GitHub
-[releases page], built for Linux (x86-64 and AArch64), Windows (x86-64 only),
-and macOS (universal). This is the recommended way to use the software.
-
-### Building from source
-
-Users who wish to build MuJoCo from source should consult the [build from
-source] section of the documentation. However, note that the commit at
-the tip of the `main` branch may be unstable.
-
-### Python (>= 3.9)
-
-The native Python bindings, which come pre-packaged with a copy of MuJoCo, can
-be installed from [PyPI] via:
-
-```bash
-pip install mujoco
-```
-
-Note that Pre-built Linux wheels target `manylinux2014`, see
-[here](https://github.com/pypa/manylinux) for compatible distributions. For more
-information such as building the bindings from source, see the [Python bindings]
-section of the documentation.
-
-## Contributing
-
-We welcome community engagement: questions, requests for help, bug reports and
-feature requests. To read more about bug reports, feature requests and more
-ambitious contributions, please see our [contributors guide](CONTRIBUTING.md)
-and [style guide](STYLEGUIDE.md).
-
-## Asking Questions
-
-Questions and requests for help are welcome as a GitHub
-["Asking for Help" Discussion](https://github.com/google-deepmind/mujoco/discussions/categories/asking-for-help)
-and should focus on a specific problem or question.
-
-## Bug reports and feature requests
-
-GitHub [Issues](https://github.com/google-deepmind/mujoco/issues) are reserved
-for bug reports, feature requests and other development-related subjects.
-
-## Related software
-MuJoCo is the backbone for numerous environment packages. Below we list several
-bindings and converters.
-
-### Bindings
-
-These packages give users of various languages access to MuJoCo functionality:
-
-#### First-party bindings:
-
-- [Python bindings](https://mujoco.readthedocs.io/en/stable/python.html)
-  - [dm_control](https://github.com/google-deepmind/dm_control), Google
-    DeepMind's related environment stack, includes
-    [PyMJCF](https://github.com/google-deepmind/dm_control/blob/main/dm_control/mjcf/README.md),
-    a module for procedural manipulation of MuJoCo models.
-- [C# bindings and Unity plug-in](https://mujoco.readthedocs.io/en/stable/unity.html)
-
-#### Third-party bindings:
-
-- **WebAssembly**: [mujoco_wasm](https://github.com/zalo/mujoco_wasm) by [@zalo](https://github.com/zalo) with contributions by
-  [@kevinzakka](https://github.com/kevinzakka), based on the [emscripten build](https://github.com/stillonearth/MuJoCo-WASM) by
-  [@stillonearth](https://github.com/stillonearth).
-
-  :arrow_right: [Click here](https://zalo.github.io/mujoco_wasm/) for a live demo of MuJoCo running in your browser.
-- **MATLAB Simulink**: [Simulink Blockset for MuJoCo Simulator](https://github.com/mathworks-robotics/mujoco-simulink-blockset)
-  by [Manoj Velmurugan](https://github.com/vmanoj1996).
-- **Swift**: [swift-mujoco](https://github.com/liuliu/swift-mujoco)
-- **Java**: [mujoco-java](https://github.com/CommonWealthRobotics/mujoco-java)
-- **Julia**: [MuJoCo.jl](https://github.com/JamieMair/MuJoCo.jl)
-
-### Converters
-
-- **OpenSim**: [MyoConverter](https://github.com/MyoHub/myoconverter) converts
-  OpenSim models to MJCF.
-- **SDFormat**: [gz-mujoco](https://github.com/gazebosim/gz-mujoco/) is a
-  two-way SDFormat <-> MJCF conversion tool.
-- **OBJ**: [obj2mjcf](https://github.com/kevinzakka/obj2mjcf)
-  a script for converting composite OBJ files into a loadable MJCF model.
-- **onshape**: [Onshape to Robot](https://github.com/rhoban/onshape-to-robot)
-  Converts [onshape](https://www.onshape.com/en/) CAD assemblies to MJCF.
-
-## Citation
-
-If you use MuJoCo for published research, please cite:
-
-```
-@inproceedings{todorov2012mujoco,
-  title={MuJoCo: A physics engine for model-based control},
-  author={Todorov, Emanuel and Erez, Tom and Tassa, Yuval},
-  booktitle={2012 IEEE/RSJ International Conference on Intelligent Robots and Systems},
-  pages={5026--5033},
-  year={2012},
-  organization={IEEE},
-  doi={10.1109/IROS.2012.6386109}
-}
-```
-
-## License and Disclaimer
-
-Copyright 2021 DeepMind Technologies Limited.
-
-Box collision code ([`engine_collision_box.c`](https://github.com/google-deepmind/mujoco/blob/main/src/engine/engine_collision_box.c))
-is Copyright 2016 Svetoslav Kolev.
-
-ReStructuredText documents, images, and videos in the `doc` directory are made
-available under the terms of the Creative Commons Attribution 4.0 (CC BY 4.0)
-license. You may obtain a copy of the License at
-https://creativecommons.org/licenses/by/4.0/legalcode.
-
-Source code is licensed under the Apache License, Version 2.0. You may obtain a
-copy of the License at https://www.apache.org/licenses/LICENSE-2.0.
-
-This is not an officially supported Google product.
-
-[build from source]: https://mujoco.readthedocs.io/en/latest/programming#building-from-source
-[Getting Started]: https://mujoco.readthedocs.io/en/latest/programming#getting-started
-[Unity]: https://unity.com/
-[releases page]: https://github.com/google-deepmind/mujoco/releases
-[mujoco.readthedocs.io]: https://mujoco.readthedocs.io
-[changelog]: https://mujoco.readthedocs.io/en/latest/changelog.html
-[Python bindings]: https://mujoco.readthedocs.io/en/stable/python.html#python-bindings
-[PyPI]: https://pypi.org/project/mujoco/
+## 致谢
+- 感谢 [Google DeepMind](https://www.deepmind.com/) 维护的开源项目 [mujoco](https://github.com/google-deepmind/mujoco)。

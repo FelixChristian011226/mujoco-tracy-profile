@@ -16,6 +16,8 @@
 
 #include <stdint.h>
 
+#include <cstdio>
+
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
@@ -24,6 +26,10 @@
 #include <thread>
 #include <utility>
 #include <vector>
+
+#ifdef TRACY_ENABLE
+#include "tracy/TracyC.h"
+#endif
 
 #include <mujoco/mjsan.h>  // IWYU pragma: keep
 #include <mujoco/mjthread.h>
@@ -136,6 +142,12 @@ class ThreadPoolImpl : public mjThreadPool {
   static void ThreadPoolWorker(
       ThreadPoolImpl* thread_pool, const size_t thread_index) {
     worker_id = thread_index + 1;
+
+#ifdef TRACY_ENABLE
+    char tracy_name[32];
+    std::snprintf(tracy_name, sizeof(tracy_name), "worker-%zu", worker_id);
+    TracyCSetThreadName(tracy_name);
+#endif
     while (!thread_pool->shutdown_) {
       auto task = static_cast<mjTask*>(thread_pool->lockless_queue_.pop());
       task->args = task->func(task->args);

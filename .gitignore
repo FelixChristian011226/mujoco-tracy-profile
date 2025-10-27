@@ -37,3 +37,12 @@ MUJOCO_LOG.TXT
 
 # Clang cache
 .cache/
+
+# Build Files
+out/
+
+# Tracy build outputs
+third_party/tracy/build/
+
+# IntelliJ IDEA project files
+.idea/

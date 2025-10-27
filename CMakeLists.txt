@@ -105,6 +105,18 @@ target_include_directories(
   PRIVATE src
 )
 
+# Tracy client headers
+target_include_directories(
+  mujoco
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tracy/public
+)
+
+# Link Tracy client source
+target_sources(
+  mujoco
+  PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/third_party/tracy/public/TracyClient.cpp
+)
+
 add_subdirectory(plugin/elasticity)
 add_subdirectory(plugin/actuator)
 add_subdirectory(plugin/sensor)
@@ -117,6 +129,8 @@ add_subdirectory(src/thread)
 add_subdirectory(src/ui)
 
 target_compile_definitions(mujoco PRIVATE _GNU_SOURCE CCD_STATIC_DEFINE MUJOCO_DLL_EXPORTS -DMC_IMPLEM_ENABLE)
+# Enable Tracy profiling (on-demand connects to server)
+target_compile_definitions(mujoco PRIVATE TRACY_ENABLE TRACY_ON_DEMAND)
 if(MUJOCO_ENABLE_AVX_INTRINSICS)
   target_compile_definitions(mujoco PUBLIC mjUSEPLATFORMSIMD)
 endif()

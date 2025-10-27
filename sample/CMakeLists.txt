@@ -87,6 +87,11 @@ target_compile_options(testspeed PUBLIC ${MUJOCO_SAMPLE_COMPILE_OPTIONS})
 target_link_libraries(testspeed Threads::Threads)
 target_link_options(testspeed PRIVATE ${MUJOCO_SAMPLE_LINK_OPTIONS})
 
+# Tracy client headers and compile definitions for testspeed
+target_include_directories(testspeed PRIVATE ${CMAKE_SOURCE_DIR}/third_party/tracy/public)
+target_compile_definitions(testspeed PRIVATE TRACY_ENABLE TRACY_ON_DEMAND)
+target_sources(testspeed PRIVATE ${CMAKE_SOURCE_DIR}/third_party/tracy/public/TracyClient.cpp)
+
 target_link_libraries(compile mujoco::mujoco)
 target_link_libraries(dependencies mujoco::mujoco)
 target_link_libraries(testspeed mujoco::mujoco)
