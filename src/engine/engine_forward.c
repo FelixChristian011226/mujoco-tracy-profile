@@ -474,7 +474,13 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   mjtNum *ctrl = mjSTACKALLOC(d, nu, mjtNum);
   mju_copy(ctrl, d->ctrl, nu);
   if (!mjDISABLED(mjDSBL_CLAMPCTRL)) {
+    #ifdef TRACY_ENABLE
+    { TracyCZoneN(zClampCtrl, "clamp_ctrl", 1);
+    #endif
     clampVec(ctrl, m->actuator_ctrlrange, m->actuator_ctrllimited, nu, NULL);
+    #ifdef TRACY_ENABLE
+      TracyCZoneEnd(zClampCtrl); }
+    #endif
   }
 
   // check controls, set all to 0 if any are bad
@@ -487,6 +493,9 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   }
 
   // act_dot for stateful actuators
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zActDot, "compute_act_dot", 1);
+  #endif
   for (int i=0; i < nu; i++) {
     int act_first = m->actuator_actadr[i];
     if (act_first < 0) {
@@ -518,22 +527,43 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       break;
 
     case mjDYN_MUSCLE:              // muscle model: prm = (tau_act, tau_deact)
+      #ifdef TRACY_ENABLE
+      { TracyCZoneN(zMuscleDyn, "mju_muscleDynamics", 1);
+      #endif
       d->act_dot[act_last] = mju_muscleDynamics(
           ctrl[i], d->act[act_last], prm);
+      #ifdef TRACY_ENABLE
+      TracyCZoneEnd(zMuscleDyn); }
+      #endif
       break;
 
     default:                        // user dynamics
       if (mjcb_act_dyn) {
         if (m->actuator_actnum[i] == 1) {
           // scalar activation dynamics, get act_dot
+          #ifdef TRACY_ENABLE
+          { TracyCZoneN(zCbActDynScalar, "mjcb_act_dyn_scalar", 1);
+          #endif
           d->act_dot[act_last] = mjcb_act_dyn(m, d, i);
+          #ifdef TRACY_ENABLE
+          TracyCZoneEnd(zCbActDynScalar); }
+          #endif
         } else {
           // higher-order dynamics, mjcb_act_dyn writes into act_dot directly
+          #ifdef TRACY_ENABLE
+          { TracyCZoneN(zCbActDynHO, "mjcb_act_dyn_highorder", 1);
+          #endif
           mjcb_act_dyn(m, d, i);
+          #ifdef TRACY_ENABLE
+          TracyCZoneEnd(zCbActDynHO); }
+          #endif
         }
       }
     }
   }
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zActDot); }
+  #endif
 
   // get act_dot from actuator plugins
   if (m->nplugin) {
@@ -546,7 +576,13 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       }
       if (plugin->capabilityflags & mjPLUGIN_ACTUATOR) {
         if (plugin->actuator_act_dot) {
+          #ifdef TRACY_ENABLE
+          { TracyCZoneN(zPluginActDot, "plugin_actuator_act_dot", 1);
+          #endif
           plugin->actuator_act_dot(m, d, i);
+          #ifdef TRACY_ENABLE
+          TracyCZoneEnd(zPluginActDot); }
+          #endif
         }
       }
     }
@@ -583,11 +619,17 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       break;
 
     case mjGAIN_MUSCLE:             // muscle gain
+      #ifdef TRACY_ENABLE
+      { TracyCZoneN(zMuscleGain, "mju_muscleGain", 1);
+      #endif
       gain = mju_muscleGain(d->actuator_length[i],
                             d->actuator_velocity[i],
                             m->actuator_lengthrange+2*i,
                             m->actuator_acc0[i],
                             prm);
+      #ifdef TRACY_ENABLE
+      TracyCZoneEnd(zMuscleGain); }
+      #endif
       break;
 
     default:                        // user gain
@@ -607,7 +649,13 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
 
       mjtNum act;
       if (m->actuator_actearly[i]) {
+        #ifdef TRACY_ENABLE
+        { TracyCZoneN(zNextActivation, "nextActivation", 1);
+        #endif
         act = nextActivation(m, d, i, act_adr, d->act_dot[act_adr]);
+        #ifdef TRACY_ENABLE
+        TracyCZoneEnd(zNextActivation); }
+        #endif
       } else {
         act = d->act[act_adr];
       }
@@ -628,10 +676,16 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       break;
 
     case mjBIAS_MUSCLE:             // muscle passive force
+      #ifdef TRACY_ENABLE
+      { TracyCZoneN(zMuscleBias, "mju_muscleBias", 1);
+      #endif
       bias =  mju_muscleBias(d->actuator_length[i],
                              m->actuator_lengthrange+2*i,
                              m->actuator_acc0[i],
                              prm);
+      #ifdef TRACY_ENABLE
+      TracyCZoneEnd(zMuscleBias); }
+      #endif
       break;
 
     default:                        // user bias
@@ -659,7 +713,13 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
         if (!plugin->compute) {
           mjERROR("`compute` is a null function pointer for plugin at slot %d", slot);
         }
+        #ifdef TRACY_ENABLE
+        { TracyCZoneN(zPluginComputeAct, "plugin_compute_actuator", 1);
+        #endif
         plugin->compute(m, d, i, mjPLUGIN_ACTUATOR);
+        #ifdef TRACY_ENABLE
+        TracyCZoneEnd(zPluginComputeAct); }
+        #endif
       }
     }
   }
@@ -697,14 +757,29 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
   }
 
   // clamp actuator_force
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zClampForce, "clamp_actuator_force", 1);
+  #endif
   clampVec(force, m->actuator_forcerange, m->actuator_forcelimited, nu, NULL);
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zClampForce); }
+  #endif
 
   // qfrc_actuator = moment' * force
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zMulMatTSparse, "mju_mulMatTVecSparse", 1);
+  #endif
   mju_mulMatTVecSparse(d->qfrc_actuator, d->actuator_moment, force, nu, nv,
                        d->moment_rownnz, d->moment_rowadr, d->moment_colind);
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zMulMatTSparse); }
+  #endif
 
   // actuator-level gravity compensation
   if (m->ngravcomp && !mjDISABLED(mjDSBL_GRAVITY) && mju_norm3(m->opt.gravity)) {
+    #ifdef TRACY_ENABLE
+    { TracyCZoneN(zActGravComp, "actuator_gravity_comp", 1);
+    #endif
     // number of dofs for each joint type: {mjJNT_FREE, mjJNT_BALL, mjJNT_SLIDE, mjJNT_HINGE}
     static const int jnt_dofnum[4] = {6, 3, 1, 1};
     int njnt = m->njnt;
@@ -719,10 +794,19 @@ void mj_fwdActuation(const mjModel* m, mjData* d) {
       int dofadr = m->jnt_dofadr[i];
       mju_addTo(d->qfrc_actuator + dofadr, d->qfrc_gravcomp + dofadr, dofnum);
     }
+    #ifdef TRACY_ENABLE
+    TracyCZoneEnd(zActGravComp); }
+    #endif
   }
 
   // clamp qfrc_actuator to joint-level actuator force limits
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zClampJntAct, "clamp_qfrc_actuator_joint_limits", 1);
+  #endif
   clampVec(d->qfrc_actuator, m->jnt_actfrcrange, m->jnt_actfrclimited, m->njnt, m->jnt_dofadr);
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zClampJntAct); }
+  #endif
 
   mj_freeStack(d);
   TM_END(mjTIMER_ACTUATION);
@@ -742,13 +826,31 @@ void mj_fwdAcceleration(const mjModel* m, mjData* d) {
   int nv = m->nv;
 
   // qfrc_smooth = sum of all non-constraint forces
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zQfrcSmoothAsm, "assemble_qfrc_smooth", 1);
+  #endif
   mju_sub(d->qfrc_smooth, d->qfrc_passive, d->qfrc_bias, nv);    // qfrc_bias is negative
   mju_addTo(d->qfrc_smooth, d->qfrc_applied, nv);
   mju_addTo(d->qfrc_smooth, d->qfrc_actuator, nv);
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zQfrcSmoothAsm); }
+  #endif
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zXfrcAcc, "mj_xfrcAccumulate", 1);
+  #endif
   mj_xfrcAccumulate(m, d, d->qfrc_smooth);
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zXfrcAcc); }
+  #endif
 
   // qacc_smooth = M \ qfrc_smooth
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zSolveM, "mj_solveM_qacc_smooth", 1);
+  #endif
   mj_solveM(m, d, d->qacc_smooth, d->qfrc_smooth, 1);
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zSolveM); }
+  #endif
 
   #ifdef TRACY_ENABLE
   TracyCZoneEnd(zAct);
@@ -908,11 +1010,23 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
   }
 
   // compute efc_b = J*qacc_smooth - aref
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zEfcB, "compute_efc_b", 1);
+  #endif
   mj_mulJacVec(m, d, d->efc_b, d->qacc_smooth);
   mju_subFrom(d->efc_b, d->efc_aref, nefc);
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zEfcB); }
+  #endif
 
   // warmstart solver
+  #ifdef TRACY_ENABLE
+  { TracyCZoneN(zWarmstart, "warmstart", 1);
+  #endif
   warmstart(m, d);
+  #ifdef TRACY_ENABLE
+  TracyCZoneEnd(zWarmstart); }
+  #endif
   mju_zeroInt(d->solver_niter, mjNISLAND);
 
   // check if islands are supported
@@ -926,48 +1040,96 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
     int nidof = d->nidof;
 
     // copy inputs to islands (vel+acc deps, pos-dependent already copied in mj_island)
+    #ifdef TRACY_ENABLE
+    { TracyCZoneN(zGatherIslands, "gather_island_inputs", 1);
+    #endif
     mju_gather(d->ifrc_smooth,     d->qfrc_smooth,     d->map_idof2dof, nidof);
     mju_gather(d->ifrc_constraint, d->qfrc_constraint, d->map_idof2dof, nidof);
     mju_gather(d->iacc_smooth,     d->qacc_smooth,     d->map_idof2dof, nidof);
     mju_gather(d->iacc,            d->qacc,            d->map_idof2dof, nidof);
     mju_gather(d->iefc_force,      d->efc_force,       d->map_iefc2efc, nefc);
     mju_gather(d->iefc_aref,       d->efc_aref,        d->map_iefc2efc, nefc);
+    #ifdef TRACY_ENABLE
+    TracyCZoneEnd(zGatherIslands); }
+    #endif
 
     // solve per island, with or without threads
     if (!d->threadpool) {
       // no threadpool, loop over islands
       for (int island=0; island < nisland; island++) {
         if (m->opt.solver == mjSOL_NEWTON) {
+          #ifdef TRACY_ENABLE
+          { TracyCZoneN(zSolveNewtonIsl, "mj_solNewton_island", 1);
+          #endif
           mj_solNewton_island(m, d, island, m->opt.iterations);
+          #ifdef TRACY_ENABLE
+          TracyCZoneEnd(zSolveNewtonIsl); }
+          #endif
         } else {
+          #ifdef TRACY_ENABLE
+          { TracyCZoneN(zSolveCGIsl, "mj_solCG_island", 1);
+          #endif
           mj_solCG_island(m, d, island, m->opt.iterations);
+          #ifdef TRACY_ENABLE
+          TracyCZoneEnd(zSolveCGIsl); }
+          #endif
         }
       }
     } else {
       // have threadpool, solve using threads
+      #ifdef TRACY_ENABLE
+      { TracyCZoneN(zSolveThreaded, "solve_threaded_islands", 1);
+      #endif
       solve_threaded(m, d, m->opt.solver == mjSOL_NEWTON);
+      #ifdef TRACY_ENABLE
+      TracyCZoneEnd(zSolveThreaded); }
+      #endif
     }
 
 
     // copy back solver outputs (scatter dofs since ni <= nv)
+    #ifdef TRACY_ENABLE
+    { TracyCZoneN(zScatterIslands, "scatter_island_outputs", 1);
+    #endif
     mju_scatter(d->qacc,            d->iacc,            d->map_idof2dof, nidof);
     mju_scatter(d->qfrc_constraint, d->ifrc_constraint, d->map_idof2dof, nidof);
     mju_gather(d->efc_force, d->iefc_force, d->map_efc2iefc, nefc);
+    #ifdef TRACY_ENABLE
+    TracyCZoneEnd(zScatterIslands); }
+    #endif
   }
 
   // run solver over all constraints
   else {
     switch ((mjtSolver) m->opt.solver) {
     case mjSOL_PGS:                     // PGS
+      #ifdef TRACY_ENABLE
+      { TracyCZoneN(zSolPGS, "mj_solPGS", 1);
+      #endif
       mj_solPGS(m, d, m->opt.iterations);
+      #ifdef TRACY_ENABLE
+      TracyCZoneEnd(zSolPGS); }
+      #endif
       break;
 
     case mjSOL_CG:                      // CG
+      #ifdef TRACY_ENABLE
+      { TracyCZoneN(zSolCG, "mj_solCG", 1);
+      #endif
       mj_solCG(m, d, m->opt.iterations);
+      #ifdef TRACY_ENABLE
+      TracyCZoneEnd(zSolCG); }
+      #endif
       break;
 
     case mjSOL_NEWTON:                  // Newton
+      #ifdef TRACY_ENABLE
+      { TracyCZoneN(zSolNewton, "mj_solNewton", 1);
+      #endif
       mj_solNewton(m, d, m->opt.iterations);
+      #ifdef TRACY_ENABLE
+      TracyCZoneEnd(zSolNewton); }
+      #endif
       break;
 
     default:
@@ -977,7 +1139,13 @@ void mj_fwdConstraint(const mjModel* m, mjData* d) {
 
   // run noslip solver if enabled
   if (m->opt.noslip_iterations > 0) {
+    #ifdef TRACY_ENABLE
+    { TracyCZoneN(zSolNoSlip, "mj_solNoSlip", 1);
+    #endif
     mj_solNoSlip(m, d, m->opt.noslip_iterations);
+    #ifdef TRACY_ENABLE
+    TracyCZoneEnd(zSolNoSlip); }
+    #endif
   }
 
   TM_END(mjTIMER_CONSTRAINT);
