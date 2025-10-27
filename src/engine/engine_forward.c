@@ -116,15 +116,33 @@ typedef struct mjFwdPositionArgs_ mjFwdPositionArgs;
 // wrapper for mj_crb and mj_factorM
 void* mj_inertialThreaded(void* args) {
   mjFwdPositionArgs* forward_args = (mjFwdPositionArgs*) args;
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zMakeM, "mj_makeM", 1);
+#endif
   mj_makeM(forward_args->m, forward_args->d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zMakeM);
+#endif
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zFactorM, "mj_factorM", 1);
+#endif
   mj_factorM(forward_args->m, forward_args->d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zFactorM);
+#endif
   return NULL;
 }
 
 // wrapper for mj_collision
 void* mj_collisionThreaded(void* args) {
   mjFwdPositionArgs* forward_args = (mjFwdPositionArgs*) args;
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zCollision, "mj_collision", 1);
+#endif
   mj_collision(forward_args->m, forward_args->d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zCollision);
+#endif
   return NULL;
 }
 
@@ -138,21 +156,69 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
 #endif
 
   TM_START;
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zKinematics, "mj_kinematics", 1);
+#endif
   mj_kinematics(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zKinematics);
+#endif
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zComPos, "mj_comPos", 1);
+#endif
   mj_comPos(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zComPos);
+#endif
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zCamlight, "mj_camlight", 1);
+#endif
   mj_camlight(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zCamlight);
+#endif
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zFlex, "mj_flex", 1);
+#endif
   mj_flex(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zFlex);
+#endif
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zTendon, "mj_tendon", 1);
+#endif
   mj_tendon(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zTendon);
+#endif
   TM_END(mjTIMER_POS_KINEMATICS);
 
   // no threadpool: inertia and collision on main thread
   if (!d->threadpool) {
     // inertia, timed internally (POS_INERTIA)
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zMakeM_main, "mj_makeM", 1);
+#endif
     mj_makeM(m, d);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zMakeM_main);
+#endif
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zFactorM_main, "mj_factorM", 1);
+#endif
     mj_factorM(m, d);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zFactorM_main);
+#endif
 
     // collision, timed internally (POS_COLLISION)
+#ifdef TRACY_ENABLE
+    TracyCZoneN(zCollision_main, "mj_collision", 1);
+#endif
     mj_collision(m, d);
+#ifdef TRACY_ENABLE
+    TracyCZoneEnd(zCollision_main);
+#endif
   }
 
   // have threadpool: inertia and collision on separate threads
@@ -177,16 +243,40 @@ void mj_fwdPosition(const mjModel* m, mjData* d) {
   }
 
   TM_RESTART;
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zMakeConstraint, "mj_makeConstraint", 1);
+#endif
   mj_makeConstraint(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zMakeConstraint);
+#endif
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zIsland, "mj_island", 1);
+#endif
   mj_island(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zIsland);
+#endif
   TM_END(mjTIMER_POS_MAKE);
 
   TM_RESTART;
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zTransmission, "mj_transmission", 1);
+#endif
   mj_transmission(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zTransmission);
+#endif
   TM_ADD(mjTIMER_POS_KINEMATICS);
 
   TM_RESTART;
+#ifdef TRACY_ENABLE
+  TracyCZoneN(zProjectConstraint, "mj_projectConstraint", 1);
+#endif
   mj_projectConstraint(m, d);
+#ifdef TRACY_ENABLE
+  TracyCZoneEnd(zProjectConstraint);
+#endif
   TM_END(mjTIMER_POS_PROJECT);
 
   TM_END1(mjTIMER_POSITION);
